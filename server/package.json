@@ -1,15 +1,16 @@
 {
-  "name": "server",
+  "name": "wordle-coop-server",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@upstash/redis": "^1.38.0",
     "cors": "^2.8.6",
