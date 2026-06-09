@@ -12,7 +12,8 @@ const io = new Server(httpServer, {
   cors: {
     origin: process.env.CLIENT_URL || '*',
     methods: ['GET', 'POST']
-  }
+  },
+  transports: ['websocket', 'polling']
 })
 
 app.use(cors({ origin: process.env.CLIENT_URL || '*' }))
