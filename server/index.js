@@ -57,6 +57,32 @@ io.on('connection', (socket) => {
     }
   })
 
+  socket.on('rejoin-room', async ({ roomId, username }, callback) => {
+    try {
+      const { getRoom, setRoom } = await import('./roomManager.js')
+      const room = await getRoom(roomId)
+      if (!room) return callback({ error: 'Room not found' })
+
+      // Update existing player's socket id
+      const player = room.players.find(p => p.username === username)
+      if (player) {
+        player.id = socket.id
+      } else {
+        // Player not in room, add them back
+        if (room.players.length >= 4) return callback({ error: 'Room is full' })
+        room.players.push({ id: socket.id, username, ready: false })
+      }
+
+      await setRoom(roomId, room)
+      socket.join(roomId)
+      io.to(roomId).emit('room-updated', room)
+      callback({ room })
+    } catch (err) {
+      console.error('rejoin-room error:', err)
+      callback({ error: 'Server error' })
+    }
+  })
+
   socket.on('player-ready', async ({ roomId }) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
