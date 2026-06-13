@@ -29,7 +29,7 @@ export async function setRoom(roomId, room) {
 
 export async function getRoom(roomId) {
   const data = await redis.get(`room:${roomId}`)
-  return data ? JSON.parse(data) : null
+  return data
 }
 
 export async function deleteRoom(roomId) {
