@@ -39,7 +39,9 @@ io.on('connection', (socket) => {
   socket.on('join-room', async ({ roomId, username }, callback) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
+      console.log('join-room attempt:', roomId, username)
       const room = await getRoom(roomId)
+      console.log('room found:', room)
       if (!room) return callback({ error: 'Room not found' })
       if (room.players.length >= 4) return callback({ error: 'Room is full' })
       if (room.started) return callback({ error: 'Game already started' })
