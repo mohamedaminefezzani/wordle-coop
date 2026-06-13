@@ -63,18 +63,18 @@ io.on('connection', (socket) => {
       const room = await getRoom(roomId)
       if (!room) return callback({ error: 'Room not found' })
 
-      // Update existing player's socket id
       const player = room.players.find(p => p.username === username)
       if (player) {
+        // Only update socket id, preserve everything else including ready state
         player.id = socket.id
       } else {
-        // Player not in room, add them back
         if (room.players.length >= 4) return callback({ error: 'Room is full' })
         room.players.push({ id: socket.id, username, ready: false })
       }
 
       await setRoom(roomId, room)
       socket.join(roomId)
+      // Broadcast to everyone including the rejoining player
       io.to(roomId).emit('room-updated', room)
       callback({ room })
     } catch (err) {
