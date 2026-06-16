@@ -1,36 +1,60 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import socket from '../socket'
 
 export default function Lobby() {
   const { roomId } = useParams()
-  const { state } = useLocation()
-  const [room, setRoom] = useState(state?.room)
+  const navigate = useNavigate()
+  const [room, setRoom] = useState(null)
   const [ready, setReady] = useState(false)
-  const username = state?.username
+  const username = sessionStorage.getItem('username')
 
   useEffect(() => {
-    socket.on('room-updated', setRoom)
+    // Always rejoin on mount — works for first load and refresh
+    socket.emit('rejoin-room', { roomId, username }, ({ room, error }) => {
+      if (error) {
+        console.error(error)
+        navigate('/')
+        return
+      }
+      setRoom(room)
+      // Restore ready state from room
+      const me = room?.players.find(p => p.username === username)
+      if (me?.ready) setReady(true)
+    })
+
+    socket.on('room-updated', (updatedRoom) => {
+      setRoom(updatedRoom)
+    })
+
     return () => socket.off('room-updated')
-  }, [])
+  }, [roomId])
 
   function handleReady() {
-    socket.emit('player-ready', { roomId })
+    socket.emit('player-ready', { roomId, username })
     setReady(true)
   }
 
-  const allReady = room?.players.every(p => p.ready)
-  const isHost = room?.players[0]?.id === socket.id
+  function handleLeave() {
+    socket.emit('leave-room', { roomId, username })
+    sessionStorage.removeItem('username')
+    navigate('/')
+  }
+
+  const isHost = room?.players[0]?.username === username
+  const allReady = room?.players.length >= 2 && room?.players.every(p => p.ready)
+
+  if (!room) return <p style={{ textAlign: 'center', marginTop: 100 }}>Loading room...</p>
 
   return (
     <div style={{ maxWidth: 400, margin: '100px auto', fontFamily: 'sans-serif' }}>
       <h2>Room: {roomId}</h2>
       <p style={{ color: '#888' }}>Share this code with your friends</p>
 
-      <h3>Players ({room?.players.length}/4)</h3>
+      <h3>Players ({room.players.length}/4)</h3>
       <ul style={{ listStyle: 'none', padding: 0 }}>
-        {room?.players.map((p, i) => (
-          <li key={p.id} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
+        {room.players.map((p, i) => (
+          <li key={p.username} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
             {i === 0 && '👑 '}
             {p.username}
             <span style={{ float: 'right', color: p.ready ? 'green' : '#aaa' }}>
@@ -46,11 +70,18 @@ export default function Lobby() {
         </button>
       )}
 
-      {isHost && allReady && room?.players.length >= 2 && (
+      {isHost && allReady && (
         <button style={{ ...btnStyle, marginTop: 12, background: 'green', color: 'white' }}>
           Start Game
         </button>
       )}
+
+      <button
+        onClick={handleLeave}
+        style={{ ...btnStyle, marginTop: 12, background: '#cc0000', color: 'white' }}
+      >
+        Leave Room
+      </button>
     </div>
   )
 }

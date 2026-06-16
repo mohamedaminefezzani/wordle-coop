@@ -29,7 +29,8 @@ export async function setRoom(roomId, room) {
 
 export async function getRoom(roomId) {
   const data = await redis.get(`room:${roomId}`)
-  return data
+  if (!data) return null
+  return typeof data === 'string' ? JSON.parse(data) : data
 }
 
 export async function deleteRoom(roomId) {

@@ -83,17 +83,35 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('player-ready', async ({ roomId }) => {
+  socket.on('player-ready', async ({ roomId, username }) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
       const room = await getRoom(roomId)
       if (!room) return
-      const player = room.players.find(p => p.id === socket.id)
+      const player = room.players.find(p => p.username === username)
       if (player) player.ready = true
       await setRoom(roomId, room)
       io.to(roomId).emit('room-updated', room)
     } catch (err) {
       console.error('player-ready error:', err)
+    }
+  })
+
+  socket.on('leave-room', async ({ roomId, username }) => {
+    try {
+      const { getRoom, setRoom, deleteRoom } = await import('./roomManager.js')
+      const room = await getRoom(roomId)
+      if (!room) return
+      room.players = room.players.filter(p => p.username !== username)
+      socket.leave(roomId)
+      if (room.players.length === 0) {
+        await deleteRoom(roomId)
+      } else {
+        await setRoom(roomId, room)
+        io.to(roomId).emit('room-updated', room)
+      }
+    } catch (err) {
+      console.error('leave-room error:', err)
     }
   })
 

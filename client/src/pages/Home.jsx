@@ -10,6 +10,7 @@ export default function Home() {
 
   function handleCreate() {
     if (!username.trim()) return setError('Enter a username')
+    sessionStorage.setItem('username', username)
     socket.emit('create-room', { username }, ({ roomId, room }) => {
       navigate(`/lobby/${roomId}`, { state: { room, username } })
     })
@@ -18,6 +19,7 @@ export default function Home() {
   function handleJoin() {
     if (!username.trim()) return setError('Enter a username')
     if (!roomId.trim()) return setError('Enter a room code')
+    sessionStorage.setItem('username', username)
     socket.emit('join-room', { roomId: roomId.toUpperCase(), username }, ({ room, error }) => {
       if (error) return setError(error)
       navigate(`/lobby/${roomId.toUpperCase()}`, { state: { room, username } })
