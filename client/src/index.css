@@ -51,7 +51,9 @@
 }
 
 body {
+  background: #121213;
   margin: 0;
+  padding: 0;
 }
 
 #root {
