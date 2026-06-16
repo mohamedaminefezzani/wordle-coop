@@ -34,6 +34,16 @@ export default function Game() {
       setPlayers(room.players || [])
     })
 
+    socket.on('connect', () => {
+    // Reconnected — rejoin room and get latest state
+    socket.emit('rejoin-room', { roomId, playerId, username }, ({ room, error }) => {
+        if (error) { navigate('/'); return }
+        setBoard(room.board || [])
+        setCurrentTurn(room.currentTurn || 0)
+        setPlayers(room.players || [])
+    })
+    })
+
     socket.on('board-updated', ({ board, currentTurn, players }) => {
       setBoard(board)
       setCurrentTurn(currentTurn)
@@ -47,6 +57,7 @@ export default function Game() {
     })
 
     return () => {
+      socket.off('connect')
       socket.off('board-updated')
       socket.off('game-over')
     }

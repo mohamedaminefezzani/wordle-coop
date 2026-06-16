@@ -22,10 +22,20 @@ export default function Lobby() {
       if (me?.ready) setReady(true)
     })
 
+    socket.on('connect', () => {
+      socket.emit('rejoin-room', { roomId, playerId, username }, ({ room, error }) => {
+        if (error) { navigate('/'); return }
+        setRoom(room)
+        const me = room?.players.find(p => p.playerId === playerId)
+        if (me?.ready) setReady(true)
+      })
+    })
+    
     socket.on('room-updated', setRoom)
     socket.on('game-started', () => navigate(`/game/${roomId}`))
 
     return () => {
+      socket.off('connect')
       socket.off('room-updated')
       socket.off('game-started')
     }
