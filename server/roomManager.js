@@ -9,11 +9,11 @@ const redis = new Redis({
 
 const TTL = 60 * 60 * 2 // 2 hours
 
-export async function createRoom(socketId, username) {
+export async function createRoom(socketId, username, playerId) {
   const roomId = Math.random().toString(36).slice(2, 8).toUpperCase()
   const room = {
     id: roomId,
-    players: [{ id: socketId, username, ready: false }],
+    players: [{ socketId, username, playerId, ready: false }],
     started: false,
     currentTurn: 0,
     board: [],

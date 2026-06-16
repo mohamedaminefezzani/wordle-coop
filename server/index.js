@@ -24,29 +24,27 @@ app.get('/', (req, res) => res.send('OK'))
 io.on('connection', (socket) => {
   console.log('connected:', socket.id)
 
-  socket.on('create-room', async ({ username }, callback) => {
-    try {
-      const { createRoom } = await import('./roomManager.js')
-      const room = await createRoom(socket.id, username)
-      socket.join(room.id)
-      callback({ roomId: room.id, room })
-    } catch (err) {
-      console.error('create-room error:', err)
-      callback({ error: 'Server error' })
-    }
+  socket.on('create-room', async ({ username, playerId }, callback) => {
+  try {
+    const { createRoom } = await import('./roomManager.js')
+    const room = await createRoom(socket.id, username, playerId)
+    socket.join(room.id)
+    callback({ roomId: room.id, room })
+  } catch (err) {
+    console.error('create-room error:', err)
+    callback({ error: 'Server error' })
+  }
   })
 
-  socket.on('join-room', async ({ roomId, username }, callback) => {
+  socket.on('join-room', async ({ roomId, username, playerId }, callback) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
-      console.log('join-room attempt:', roomId, username)
       const room = await getRoom(roomId)
-      console.log('room found:', room)
       if (!room) return callback({ error: 'Room not found' })
       if (room.players.length >= 4) return callback({ error: 'Room is full' })
       if (room.started) return callback({ error: 'Game already started' })
 
-      room.players.push({ id: socket.id, username, ready: false })
+      room.players.push({ socketId: socket.id, username, playerId, ready: false })
       await setRoom(roomId, room)
       socket.join(roomId)
       io.to(roomId).emit('room-updated', room)
@@ -57,24 +55,22 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('rejoin-room', async ({ roomId, username }, callback) => {
+  socket.on('rejoin-room', async ({ roomId, playerId, username }, callback) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
       const room = await getRoom(roomId)
       if (!room) return callback({ error: 'Room not found' })
 
-      const player = room.players.find(p => p.username === username)
+      const player = room.players.find(p => p.playerId === playerId)
       if (player) {
-        // Only update socket id, preserve everything else including ready state
-        player.id = socket.id
+        player.socketId = socket.id  // update socket id, preserve everything else
       } else {
         if (room.players.length >= 4) return callback({ error: 'Room is full' })
-        room.players.push({ id: socket.id, username, ready: false })
+        room.players.push({ socketId: socket.id, username, playerId, ready: false })
       }
 
       await setRoom(roomId, room)
       socket.join(roomId)
-      // Broadcast to everyone including the rejoining player
       io.to(roomId).emit('room-updated', room)
       callback({ room })
     } catch (err) {
@@ -83,12 +79,12 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('player-ready', async ({ roomId, username }) => {
+  socket.on('player-ready', async ({ roomId, playerId }) => {
     try {
       const { getRoom, setRoom } = await import('./roomManager.js')
       const room = await getRoom(roomId)
       if (!room) return
-      const player = room.players.find(p => p.username === username)
+      const player = room.players.find(p => p.playerId === playerId)
       if (player) player.ready = true
       await setRoom(roomId, room)
       io.to(roomId).emit('room-updated', room)
@@ -97,12 +93,12 @@ io.on('connection', (socket) => {
     }
   })
 
-  socket.on('leave-room', async ({ roomId, username }) => {
+  socket.on('leave-room', async ({ roomId, playerId }) => {
     try {
       const { getRoom, setRoom, deleteRoom } = await import('./roomManager.js')
       const room = await getRoom(roomId)
       if (!room) return
-      room.players = room.players.filter(p => p.username !== username)
+      room.players = room.players.filter(p => p.playerId !== playerId)
       socket.leave(roomId)
       if (room.players.length === 0) {
         await deleteRoom(roomId)

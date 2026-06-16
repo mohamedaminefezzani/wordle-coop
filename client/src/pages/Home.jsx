@@ -8,21 +8,29 @@ export default function Home() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
+  function generatePlayerId() {
+    return Math.random().toString(36).slice(2, 10)
+  }
+
   function handleCreate() {
     if (!username.trim()) return setError('Enter a username')
+    const playerId = generatePlayerId()
     sessionStorage.setItem('username', username)
-    socket.emit('create-room', { username }, ({ roomId, room }) => {
-      navigate(`/lobby/${roomId}`, { state: { room, username } })
+    sessionStorage.setItem('playerId', playerId)
+    socket.emit('create-room', { username, playerId }, ({ roomId, room }) => {
+      navigate(`/lobby/${roomId}`)
     })
   }
 
   function handleJoin() {
     if (!username.trim()) return setError('Enter a username')
     if (!roomId.trim()) return setError('Enter a room code')
+    const playerId = generatePlayerId()
     sessionStorage.setItem('username', username)
-    socket.emit('join-room', { roomId: roomId.toUpperCase(), username }, ({ room, error }) => {
+    sessionStorage.setItem('playerId', playerId)
+    socket.emit('join-room', { roomId: roomId.toUpperCase(), username, playerId }, ({ room, error }) => {
       if (error) return setError(error)
-      navigate(`/lobby/${roomId.toUpperCase()}`, { state: { room, username } })
+      navigate(`/lobby/${roomId.toUpperCase()}`)
     })
   }
 

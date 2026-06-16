@@ -8,40 +8,37 @@ export default function Lobby() {
   const [room, setRoom] = useState(null)
   const [ready, setReady] = useState(false)
   const username = sessionStorage.getItem('username')
+  const playerId = sessionStorage.getItem('playerId')
 
   useEffect(() => {
-    // Always rejoin on mount — works for first load and refresh
-    socket.emit('rejoin-room', { roomId, username }, ({ room, error }) => {
+    socket.emit('rejoin-room', { roomId, playerId, username }, ({ room, error }) => {
       if (error) {
         console.error(error)
         navigate('/')
         return
       }
       setRoom(room)
-      // Restore ready state from room
-      const me = room?.players.find(p => p.username === username)
+      const me = room?.players.find(p => p.playerId === playerId)
       if (me?.ready) setReady(true)
     })
 
-    socket.on('room-updated', (updatedRoom) => {
-      setRoom(updatedRoom)
-    })
-
+    socket.on('room-updated', setRoom)
     return () => socket.off('room-updated')
   }, [roomId])
 
   function handleReady() {
-    socket.emit('player-ready', { roomId, username })
+    socket.emit('player-ready', { roomId, playerId })
     setReady(true)
   }
 
   function handleLeave() {
-    socket.emit('leave-room', { roomId, username })
+    socket.emit('leave-room', { roomId, playerId })
     sessionStorage.removeItem('username')
+    sessionStorage.removeItem('playerId')
     navigate('/')
   }
 
-  const isHost = room?.players[0]?.username === username
+  const isHost = room?.players[0]?.playerId === playerId
   const allReady = room?.players.length >= 2 && room?.players.every(p => p.ready)
 
   if (!room) return <p style={{ textAlign: 'center', marginTop: 100 }}>Loading room...</p>
@@ -54,7 +51,7 @@ export default function Lobby() {
       <h3>Players ({room.players.length}/4)</h3>
       <ul style={{ listStyle: 'none', padding: 0 }}>
         {room.players.map((p, i) => (
-          <li key={p.username} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
+          <li key={p.playerId} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
             {i === 0 && '👑 '}
             {p.username}
             <span style={{ float: 'right', color: p.ready ? 'green' : '#aaa' }}>
