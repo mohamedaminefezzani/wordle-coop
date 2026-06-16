@@ -114,7 +114,36 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('disconnected:', socket.id)
   })
+
+  socket.on('start-game', async ({ roomId, playerId }, callback) => {
+  try {
+    const { getRoom, setRoom } = await import('./roomManager.js')
+    const { getRandomWord } = await import('./db.js')
+
+    const room = await getRoom(roomId)
+    if (!room) return callback({ error: 'Room not found' })
+
+    // Only host can start
+    if (room.players[0].playerId !== playerId) return callback({ error: 'Only host can start' })
+
+    const word = await getRandomWord()
+    room.word = word
+    room.started = true
+    room.currentTurn = 0
+    room.board = [] // list of completed guesses
+    room.currentGuess = [] // letters submitted so far for current guess
+
+    await setRoom(roomId, room)
+    io.to(roomId).emit('game-started', { room })
+    callback({ room })
+  } catch (err) {
+    console.error('start-game error:', err)
+    callback({ error: 'Server error' })
+    }
+  })
+
 })
+
 
 const PORT = process.env.PORT || 3001
 httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`))

@@ -23,7 +23,12 @@ export default function Lobby() {
     })
 
     socket.on('room-updated', setRoom)
-    return () => socket.off('room-updated')
+    socket.on('game-started', () => navigate(`/game/${roomId}`))
+
+    return () => {
+      socket.off('room-updated')
+      socket.off('game-started')
+    }
   }, [roomId])
 
   function handleReady() {
@@ -36,6 +41,13 @@ export default function Lobby() {
     sessionStorage.removeItem('username')
     sessionStorage.removeItem('playerId')
     navigate('/')
+  }
+
+  function handleStart() {
+    socket.emit('start-game', { roomId, playerId }, ({ room, error }) => {
+      if (error) return console.error(error)
+      navigate(`/game/${roomId}`)
+    })
   }
 
   const isHost = room?.players[0]?.playerId === playerId
@@ -68,7 +80,10 @@ export default function Lobby() {
       )}
 
       {isHost && allReady && (
-        <button style={{ ...btnStyle, marginTop: 12, background: 'green', color: 'white' }}>
+        <button
+          onClick={handleStart}
+          style={{ ...btnStyle, marginTop: 12, background: 'green', color: 'white' }}
+        >
           Start Game
         </button>
       )}
