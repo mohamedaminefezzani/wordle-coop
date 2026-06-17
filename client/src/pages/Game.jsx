@@ -58,7 +58,7 @@ export default function Game() {
 
     socket.on('game-started', () => {
       setRoom(room)
-      setBoard(room.board || [])
+      setBoard([])
       setPlayers(room.players || [])
       setGameOver(null)
       setGuess('')
