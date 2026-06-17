@@ -56,10 +56,17 @@ export default function Game() {
       setGameOver({ won, word })
     })
 
+    socket.on('game-started', () => {
+      setGameOver(null)
+      setGuess('')
+      setError('')
+    })
+
     return () => {
       socket.off('connect')
       socket.off('board-updated')
       socket.off('game-over')
+      socket.off('game-started')
     }
   }, [roomId])
 
@@ -77,6 +84,16 @@ export default function Game() {
 
   function handleKeyDown(e) {
     if (e.key === 'Enter') handleSubmit()
+  }
+
+  function handlePlayAgain() {
+    socket.emit('start-game', {roomId, playerId, username}, ({room, error}) => {
+      if (error) return setError(error)
+    
+    setGameOver(null)
+    setGuess('')
+    setError('')
+    })
   }
 
   // Build display rows — 6 total
@@ -178,7 +195,7 @@ export default function Game() {
           <h2>{gameOver.won ? '🎉 You won!' : '😞 Game over'}</h2>
           <p style={{ color: '#aaa' }}>The word was <strong style={{ color: 'white' }}>{gameOver.word.toUpperCase()}</strong></p>
           <button
-            onClick={() => navigate('/')}
+            onClick={handlePlayAgain}
             style={{
               marginTop: 16, padding: '12px 24px',
               background: '#538d4e', color: 'white',
