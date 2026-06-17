@@ -56,10 +56,11 @@ export default function Game() {
       setGameOver({ won, word })
     })
 
-    socket.on('game-started', () => {
+    socket.on('game-started', ({ currentTurn, players }) => {
       setRoom(room)
       setBoard([])
-      setPlayers(room.players || [])
+      etCurrentTurn(currentTurn)
+      setPlayers(players)
       setGameOver(null)
       setGuess('')
       setError('')
