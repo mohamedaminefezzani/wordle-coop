@@ -56,11 +56,13 @@ export default function Game() {
       setGameOver({ won, word })
     })
 
-    socket.on('game-started', ({ currentTurn, players }) => {
+    socket.on('game-started', ({ room }) => {
       setRoom(room)
-      setBoard([])
-      etCurrentTurn(currentTurn)
-      setPlayers(players)
+
+      setBoard(room.board || [])
+      setCurrentTurn(room.currentTurn || 0)
+      setPlayers(room.players || [])
+
       setGameOver(null)
       setGuess('')
       setError('')
@@ -91,13 +93,13 @@ export default function Game() {
   }
 
   function handlePlayAgain() {
-    socket.emit('start-game', {roomId, playerId, username}, ({room, error}) => {
-      if (error) return setError(error)
-    
-    setGameOver(null)
-    setGuess('')
-    setError('')
-    })
+    socket.emit(
+      'start-game',
+      { roomId, playerId },
+      ({ error }) => {
+        if (error) setError(error)
+      }
+    )
   }
 
   // Build display rows — 6 total
