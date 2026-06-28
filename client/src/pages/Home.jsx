@@ -17,7 +17,7 @@ export default function Home() {
     const playerId = generatePlayerId()
     sessionStorage.setItem('username', username)
     sessionStorage.setItem('playerId', playerId)
-    socket.emit('create-room', { username, playerId }, ({ roomId, room }) => {
+    socket.emit('create-room', { username, playerId }, ({ roomId }) => {
       navigate(`/lobby/${roomId}`)
     })
   }
@@ -34,44 +34,82 @@ export default function Home() {
     })
   }
 
-  return (
-    <div style={{ maxWidth: 400, margin: '100px auto', fontFamily: 'sans-serif' }}>
-      <h1>Wordle Coop</h1>
+  function handleKey(e) {
+    if (e.key === 'Enter') handleCreate()
+  }
 
+  return (
+    <div style={{ maxWidth: 360, margin: '80px auto', padding: '0 16px' }}>
+      <h1 style={{
+        textAlign: 'center', fontSize: 32, fontWeight: 800,
+        letterSpacing: 6, marginBottom: 8, color: 'white'
+      }}>
+        WORDLE
+      </h1>
+      <p style={{ textAlign: 'center', color: '#818384', marginBottom: 32, fontSize: 14 }}>
+        cooperative
+      </p>
+
+      <label style={labelStyle}>Username</label>
       <input
-        placeholder="Your username"
+        placeholder="Enter your username"
         value={username}
         onChange={e => setUsername(e.target.value)}
+        onKeyDown={handleKey}
         style={inputStyle}
+        maxLength={16}
+        autoFocus
       />
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && (
+        <p style={{ color: '#ff4444', fontSize: 13, marginBottom: 12 }}>{error}</p>
+      )}
 
-      <button onClick={handleCreate} style={btnStyle}>
+      <button onClick={handleCreate} style={{ ...btnStyle, background: '#538d4e' }}>
         Create Room
       </button>
 
-      <hr style={{ margin: '24px 0' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
+        <div style={{ flex: 1, height: 1, background: '#3a3a3c' }} />
+        <span style={{ color: '#565758', fontSize: 12, letterSpacing: 1 }}>OR</span>
+        <div style={{ flex: 1, height: 1, background: '#3a3a3c' }} />
+      </div>
 
+      <label style={labelStyle}>Room Code</label>
       <input
-        placeholder="Room code"
+        placeholder="Enter room code"
         value={roomId}
         onChange={e => setRoomId(e.target.value.toUpperCase())}
-        style={inputStyle}
+        onKeyDown={e => { if (e.key === 'Enter') handleJoin() }}
+        style={{ ...inputStyle, letterSpacing: 6, textTransform: 'uppercase' }}
+        maxLength={6}
       />
 
-      <button onClick={handleJoin} style={btnStyle}>
+      <button onClick={handleJoin} style={{ ...btnStyle, background: '#1a1a1b', border: '2px solid #565758' }}>
         Join Room
       </button>
     </div>
   )
 }
 
-const inputStyle = {
-  display: 'block', width: '100%', padding: '10px',
-  marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box'
+const labelStyle = {
+  display: 'block', fontSize: 11, fontWeight: 700,
+  letterSpacing: 1, color: '#818384',
+  textTransform: 'uppercase', marginBottom: 6
 }
+
+const inputStyle = {
+  display: 'block', width: '100%',
+  padding: '12px 14px', marginBottom: 12,
+  fontSize: 16, background: '#1a1a1b',
+  color: 'white', border: '2px solid #3a3a3c',
+  borderRadius: 6, outline: 'none'
+}
+
 const btnStyle = {
-  width: '100%', padding: '12px',
-  fontSize: '16px', cursor: 'pointer'
+  width: '100%', padding: '13px',
+  fontSize: 15, fontWeight: 700,
+  color: 'white', border: 'none',
+  borderRadius: 6, cursor: 'pointer',
+  letterSpacing: 1
 }
