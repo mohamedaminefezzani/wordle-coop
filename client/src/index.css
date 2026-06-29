@@ -19,44 +19,44 @@ input, button {
   font-family: inherit;
 }
 
-@keyframes flipIn {
-  0% { transform: rotateX(0deg); }
-  50% { transform: rotateX(-90deg); }
+/* Tile flip — two-phase animation so color swaps at the exact halfway point */
+@keyframes flip-front {
+  0%   { transform: rotateX(0deg); }
+  100% { transform: rotateX(-90deg); }
 }
 
-@keyframes flipOut {
-  50% { transform: rotateX(-90deg); }
+@keyframes flip-back {
+  0%   { transform: rotateX(90deg); }
   100% { transform: rotateX(0deg); }
 }
 
-@keyframes flip {
-  0%   { transform: rotateX(0deg); background: #2a2a2c; border-color: #565758; }
-  45%  { transform: rotateX(-90deg); background: #2a2a2c; }
-  55%  { transform: rotateX(-90deg); }
-  100% { transform: rotateX(0deg); }
+.tile-flip-front {
+  animation: flip-front 0.25s ease-in forwards;
 }
 
-.tile-flip {
-  animation: flip 0.5s ease forwards;
+.tile-flip-back {
+  animation: flip-back 0.25s ease-out forwards;
 }
 
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.toast {
-  animation: toast-in 0.2s ease;
-}
-
+/* Shake row when invalid guess */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  20%       { transform: translateX(-4px); }
-  40%       { transform: translateX(4px); }
-  60%       { transform: translateX(-4px); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-6px); }
   80%       { transform: translateX(4px); }
 }
 
 .shake {
   animation: shake 0.4s ease;
+}
+
+/* Toast notification */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.toast {
+  animation: toast-in 0.15s ease;
 }

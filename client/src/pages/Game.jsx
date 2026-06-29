@@ -2,7 +2,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import socket from '../socket'
 
-const COLORS = {
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const TILE_COLORS = {
   green:  { bg: '#538d4e', border: '#538d4e' },
   yellow: { bg: '#b59f3b', border: '#b59f3b' },
   gray:   { bg: '#3a3a3c', border: '#3a3a3c' },
@@ -10,62 +12,145 @@ const COLORS = {
   tbd:    { bg: '#121213', border: '#565758' },
 }
 
-const KEYBOARD_ROWS = [
+const KEY_ROWS = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L'],
   ['ENTER','Z','X','C','V','B','N','M','⌫'],
 ]
 
-// Toast component
+const FLIP_DURATION = 250   // ms per half-flip
+const FLIP_STAGGER  = 350   // ms between each tile in a row
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+
 function Toast({ message }) {
   if (!message) return null
   return (
-    <div className="toast" style={{
-      position: 'fixed', top: 80, left: '50%',
-      transform: 'translateX(-50%)',
-      background: 'white', color: '#121213',
-      padding: '10px 20px', borderRadius: 6,
-      fontWeight: 700, fontSize: 14,
-      zIndex: 100, pointerEvents: 'none',
-      whiteSpace: 'nowrap'
-    }}>
+    <div
+      className="toast"
+      style={{
+        position: 'fixed', top: 70, left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'white', color: '#121213',
+        padding: '10px 20px', borderRadius: 6,
+        fontWeight: 700, fontSize: 14,
+        zIndex: 100, pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+      }}
+    >
       {message}
     </div>
   )
 }
 
-export default function Game() {
-  const { roomId } = useParams()
-  const navigate = useNavigate()
-  const playerId = sessionStorage.getItem('playerId')
-  const username = sessionStorage.getItem('username')
+// ─── Tile ─────────────────────────────────────────────────────────────────────
+//
+// Each tile manages its own two-phase flip independently.
+// Phase 1 (flip-front): tile rotates from 0° → -90°  (disappears)
+// At the halfway point the color is swapped to the revealed color.
+// Phase 2 (flip-back):  tile rotates from +90° → 0°  (reappears with new color)
+//
+// This guarantees the color is NEVER visible before the halfway point.
 
-  const [board, setBoard] = useState([])
-  const [currentTurn, setCurrentTurn] = useState(0)
-  const [players, setPlayers] = useState([])
+function Tile({ letter, colorKey, animate, animDelay }) {
+  const [phase, setPhase]       = useState('idle')   // 'idle' | 'front' | 'back'
+  const [displayColor, setDisplayColor] = useState('empty')
+  const timerRef = useRef(null)
+
+  // When animate turns true, kick off the flip sequence
+  useEffect(() => {
+    if (!animate) {
+      // No animation — just show the color immediately (e.g. past rows on rejoin)
+      setPhase('idle')
+      setDisplayColor(colorKey)
+      return
+    }
+
+    // Clear any previous timers
+    clearTimeout(timerRef.current)
+
+    // Start in unflipped state with no color
+    setPhase('idle')
+    setDisplayColor('tbd')
+
+    // After stagger delay, begin phase 1
+    timerRef.current = setTimeout(() => {
+      setPhase('front')
+
+      // Halfway through phase 1 → swap to revealed color
+      timerRef.current = setTimeout(() => {
+        setDisplayColor(colorKey)
+        setPhase('back')
+      }, FLIP_DURATION)
+    }, animDelay)
+
+    return () => clearTimeout(timerRef.current)
+  }, [animate, colorKey, animDelay])
+
+  const { bg, border } = TILE_COLORS[displayColor] || TILE_COLORS.empty
+
+  return (
+    <div
+      className={
+        phase === 'front' ? 'tile-flip-front' :
+        phase === 'back'  ? 'tile-flip-back'  : ''
+      }
+      style={{
+        width: 54, height: 54,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 22, fontWeight: 800,
+        background: bg,
+        border: `2px solid ${border}`,
+        borderRadius: 4,
+        color: 'white',
+        textTransform: 'uppercase',
+        // Perspective needed on the element itself for rotateX to look 3D
+        perspective: '250px',
+        willChange: 'transform',
+      }}
+    >
+      {letter}
+    </div>
+  )
+}
+
+// ─── Main Game component ──────────────────────────────────────────────────────
+
+export default function Game() {
+  const { roomId }  = useParams()
+  const navigate    = useNavigate()
+  const playerId    = sessionStorage.getItem('playerId')
+  const username    = sessionStorage.getItem('username')
+
+  const [board, setBoard]               = useState([])
+  const [currentTurn, setCurrentTurn]   = useState(0)
+  const [players, setPlayers]           = useState([])
   const [currentGuess, setCurrentGuess] = useState('')
-  const [gameOver, setGameOver] = useState(null)
-  const [toast, setToast] = useState('')
-  const [revealingRow, setRevealingRow] = useState(-1)
-  const [letterStates, setLetterStates] = useState({})
-  const [shaking, setShaking] = useState(false)
+  const [gameOver, setGameOver]         = useState(null)   // { won, word }
+  const [toast, setToast]               = useState('')
+  const [letterStates, setLetterStates] = useState({})     // { A: 'green', ... }
+  const [shakingRow, setShakingRow]     = useState(false)
+  // revealingRowIdx: the board row currently animating (-1 = none)
+  const [revealingRowIdx, setRevealingRowIdx] = useState(-1)
+
   const toastTimer = useRef(null)
 
-  function showToast(msg, duration = 1500) {
+  // ── helpers ──
+
+  function showToast(msg, duration = 1800) {
     setToast(msg)
     clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(''), duration)
   }
 
   function triggerShake() {
-    setShaking(true)
-    setTimeout(() => setShaking(false), 400)
+    setShakingRow(true)
+    setTimeout(() => setShakingRow(false), 400)
   }
 
-  // Build letter states from board
   function buildLetterStates(board) {
-    const states = {}
     const priority = { green: 3, yellow: 2, gray: 1 }
+    const states = {}
     board.forEach(row => {
       row.guess.split('').forEach((letter, i) => {
         const color = row.result[i]
@@ -77,12 +162,20 @@ export default function Game() {
     return states
   }
 
+  // Total animation time for a full row reveal
+  function rowRevealDuration(numTiles = 5) {
+    return numTiles * FLIP_STAGGER + FLIP_DURATION * 2
+  }
+
   function syncRoom(room) {
     setBoard(room.board || [])
     setCurrentTurn(room.currentTurn || 0)
     setPlayers(room.players || [])
     setLetterStates(buildLetterStates(room.board || []))
+    setRevealingRowIdx(-1)
   }
+
+  // ── socket setup ──
 
   useEffect(() => {
     socket.emit('rejoin-room', { roomId, playerId, username }, ({ room, error }) => {
@@ -98,23 +191,31 @@ export default function Game() {
     })
 
     socket.on('board-updated', ({ board, currentTurn, players }) => {
-      setRevealingRow(board.length - 1)
-      setTimeout(() => setRevealingRow(-1), 500 * 5 + 200)
+      const rowIdx = board.length - 1
+      // Update board data immediately — Tile components handle their own animation
       setBoard(board)
       setCurrentTurn(currentTurn)
       setPlayers(players)
-      setLetterStates(buildLetterStates(board))
+      setRevealingRowIdx(rowIdx)
+
+      // After the full row animation finishes, update keyboard colors & clear flag
+      setTimeout(() => {
+        setLetterStates(buildLetterStates(board))
+        setRevealingRowIdx(-1)
+      }, rowRevealDuration())
     })
 
     socket.on('game-over', ({ won, word, board }) => {
-      setRevealingRow(board.length - 1)
+      const rowIdx = board.length - 1
+      setBoard(board)
+      setRevealingRowIdx(rowIdx)
+
       setTimeout(() => {
-        setRevealingRow(-1)
-        setBoard(board)
         setLetterStates(buildLetterStates(board))
+        setRevealingRowIdx(-1)
         setGameOver({ won, word })
         showToast(won ? '🎉 You won!' : `The word was ${word.toUpperCase()}`, 4000)
-      }, 500 * 5 + 200)
+      }, rowRevealDuration())
     })
 
     socket.on('game-started', ({ room }) => {
@@ -131,16 +232,15 @@ export default function Game() {
     }
   }, [roomId])
 
+  // ── input ──
+
   const activePlayer = players[currentTurn % players.length]
-  const isMyTurn = activePlayer?.playerId === playerId
-  const isHost = players[0]?.playerId === playerId
+  const isMyTurn     = activePlayer?.playerId === playerId
+  const isHost       = players[0]?.playerId === playerId
 
   const handleKey = useCallback((key) => {
     if (gameOver) return
-    if (!isMyTurn) {
-      showToast("It's not your turn!")
-      return
-    }
+    if (!isMyTurn) { showToast("It's not your turn!"); return }
 
     if (key === 'ENTER') {
       if (currentGuess.length !== 5) {
@@ -149,11 +249,7 @@ export default function Game() {
         return
       }
       socket.emit('submit-guess', { roomId, playerId, guess: currentGuess }, ({ error }) => {
-        if (error) {
-          showToast(error)
-          triggerShake()
-          return
-        }
+        if (error) { showToast(error); triggerShake(); return }
         setCurrentGuess('')
       })
       return
@@ -169,11 +265,9 @@ export default function Game() {
     }
   }, [gameOver, isMyTurn, currentGuess, roomId, playerId])
 
-  // Physical keyboard
+  // Physical keyboard listener
   useEffect(() => {
-    function onKeyDown(e) {
-      handleKey(e.key.toUpperCase())
-    }
+    const onKeyDown = e => handleKey(e.key.toUpperCase())
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleKey])
@@ -191,28 +285,35 @@ export default function Game() {
     navigate('/')
   }
 
-  // Build 6 rows
-  const rows = Array(6).fill(null).map((_, i) => board[i] || null)
+  // ── render ──
 
-  // Current guess preview row index
+  const rows = Array(6).fill(null).map((_, i) => board[i] || null)
   const previewRowIdx = board.length
 
   return (
-    <div style={{ maxWidth: 420, margin: '0 auto', padding: '16px', userSelect: 'none' }}>
+    <div style={{
+      maxWidth: 420, margin: '0 auto',
+      padding: '12px 8px', userSelect: 'none',
+    }}>
       <Toast message={toast} />
 
       {/* Header */}
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderBottom: '1px solid #3a3a3c', paddingBottom: 12, marginBottom: 12
+        textAlign: 'center',
+        borderBottom: '1px solid #3a3a3c',
+        paddingBottom: 10, marginBottom: 10,
       }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: 5 }}>WORDLE COOP</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, letterSpacing: 5 }}>WORDLE COOP</h1>
       </div>
 
-      {/* Players row */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+      {/* Players */}
+      <div style={{
+        display: 'flex', justifyContent: 'center',
+        gap: 6, marginBottom: 8, flexWrap: 'wrap',
+      }}>
         {players.map((p, i) => {
-          const isActive = players[currentTurn % players.length]?.playerId === p.playerId && !gameOver
+          const isActive = !gameOver &&
+            players[currentTurn % players.length]?.playerId === p.playerId
           return (
             <span key={p.playerId} style={{
               padding: '3px 10px', borderRadius: 20, fontSize: 12,
@@ -220,10 +321,9 @@ export default function Game() {
               border: `1px solid ${isActive ? '#538d4e' : '#3a3a3c'}`,
               color: isActive ? 'white' : '#818384',
               fontWeight: isActive ? 700 : 400,
-              transition: 'all 0.2s'
+              transition: 'background 0.2s, border-color 0.2s',
             }}>
-              {i === 0 ? '👑 ' : ''}{p.username}
-              {p.playerId === playerId ? ' (you)' : ''}
+              {i === 0 ? '👑 ' : ''}{p.username}{p.playerId === playerId ? ' (you)' : ''}
             </span>
           )
         })}
@@ -231,58 +331,50 @@ export default function Game() {
 
       {/* Turn indicator */}
       {!gameOver && (
-        <p style={{ textAlign: 'center', color: '#818384', fontSize: 13, marginBottom: 12 }}>
-          {isMyTurn ? '🟢 Your turn — type your guess' : `⏳ ${activePlayer?.username}'s turn`}
+        <p style={{ textAlign: 'center', color: '#818384', fontSize: 13, marginBottom: 10 }}>
+          {isMyTurn
+            ? '🟢 Your turn — type your guess'
+            : `⏳ ${activePlayer?.username}'s turn`}
         </p>
       )}
 
       {/* Board */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center', marginBottom: 16 }}>
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        gap: 5, alignItems: 'center', marginBottom: 12,
+      }}>
         {rows.map((row, rowIdx) => {
-          const isPreview = !row && rowIdx === previewRowIdx && isMyTurn && !gameOver
-          const isRevealing = rowIdx === revealingRow
+          const isPreviewRow = !row && rowIdx === previewRowIdx && isMyTurn && !gameOver
+          const isAnimating  = rowIdx === revealingRowIdx
 
           return (
             <div
               key={rowIdx}
-              className={isPreview && shaking ? 'shake' : ''}
+              className={isPreviewRow && shakingRow ? 'shake' : ''}
               style={{ display: 'flex', gap: 5 }}
             >
               {Array(5).fill(null).map((_, colIdx) => {
-                let letter = ''
+                let letter   = ''
                 let colorKey = 'empty'
-                let animDelay = 0
+                let animate  = false
 
                 if (row) {
-                  letter = row.guess[colIdx]
-                  colorKey = isRevealing ? 'tbd' : row.result[colIdx]
-                  if (isRevealing) {
-                    animDelay = colIdx * 0.5
-                  }
-                } else if (isPreview) {
-                  letter = currentGuess[colIdx] || ''
+                  letter   = row.guess[colIdx]
+                  colorKey = row.result[colIdx]   // 'green' | 'yellow' | 'gray'
+                  animate  = isAnimating
+                } else if (isPreviewRow) {
+                  letter   = currentGuess[colIdx] || ''
                   colorKey = letter ? 'tbd' : 'empty'
                 }
 
-                const { bg, border } = COLORS[colorKey] || COLORS.empty
-
                 return (
-                  <div
+                  <Tile
                     key={colIdx}
-                    className={isRevealing ? 'tile-flip' : ''}
-                    style={{
-                      width: 54, height: 54,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 22, fontWeight: 800,
-                      background: bg, border: `2px solid ${border}`,
-                      borderRadius: 4, color: 'white',
-                      textTransform: 'uppercase',
-                      animationDelay: isRevealing ? `${colIdx * 0.35}s` : '0s',
-                      transition: letter && !row ? 'border-color 0.1s' : 'none'
-                    }}
-                  >
-                    {letter}
-                  </div>
+                    letter={letter}
+                    colorKey={colorKey}
+                    animate={animate}
+                    animDelay={colIdx * FLIP_STAGGER}
+                  />
                 )
               })}
             </div>
@@ -291,13 +383,12 @@ export default function Game() {
       </div>
 
       {/* Who guessed each row */}
-      {board.length > 0 && !gameOver && (
+      {board.length > 0 && (
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
           {board.map((row, i) => (
-            <span key={i} style={{
-              fontSize: 11, color: '#565758', marginRight: 8
-            }}>
-              Row {i + 1}: <span style={{ color: '#818384' }}>{row.username}</span>
+            <span key={i} style={{ fontSize: 11, color: '#565758', marginRight: 8 }}>
+              Row {i + 1}:{' '}
+              <span style={{ color: '#818384' }}>{row.username}</span>
             </span>
           ))}
         </div>
@@ -305,9 +396,8 @@ export default function Game() {
 
       {/* Game over panel */}
       {gameOver && (
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
-          {/* Who guessed what — shown on game over */}
-          <div style={{ marginBottom: 12 }}>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <div style={{ marginBottom: 10 }}>
             {board.map((row, i) => (
               <div key={i} style={{ fontSize: 12, color: '#565758', marginBottom: 2 }}>
                 <span style={{ color: '#818384' }}>{row.username}</span>
@@ -319,10 +409,7 @@ export default function Game() {
 
           {isHost ? (
             <button onClick={handlePlayAgain} style={{
-              padding: '12px 24px', fontSize: 15, fontWeight: 700,
-              background: '#538d4e', color: 'white',
-              border: 'none', borderRadius: 6, cursor: 'pointer',
-              marginBottom: 8, width: '100%'
+              ...btnStyle, background: '#538d4e', marginBottom: 8,
             }}>
               Play Again
             </button>
@@ -333,10 +420,10 @@ export default function Game() {
           )}
 
           <button onClick={handleLeave} style={{
-            padding: '12px 24px', fontSize: 15, fontWeight: 700,
-            background: 'transparent', color: '#818384',
-            border: '1px solid #3a3a3c', borderRadius: 6,
-            cursor: 'pointer', width: '100%'
+            ...btnStyle,
+            background: 'transparent',
+            border: '1px solid #3a3a3c',
+            color: '#818384',
           }}>
             Leave Room
           </button>
@@ -345,15 +432,16 @@ export default function Game() {
 
       {/* Keyboard */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-        {KEYBOARD_ROWS.map((row, ri) => (
+        {KEY_ROWS.map((row, ri) => (
           <div key={ri} style={{ display: 'flex', gap: 5 }}>
             {row.map(key => {
               const state = letterStates[key]
               const isWide = key === 'ENTER' || key === '⌫'
-              const bg = state === 'green' ? '#538d4e'
-                : state === 'yellow' ? '#b59f3b'
-                : state === 'gray' ? '#3a3a3c'
-                : '#818384'
+              const bg =
+                state === 'green'  ? '#538d4e' :
+                state === 'yellow' ? '#b59f3b' :
+                state === 'gray'   ? '#3a3a3c' :
+                '#818384'
 
               return (
                 <button
@@ -365,10 +453,9 @@ export default function Game() {
                     border: 'none', borderRadius: 4,
                     fontSize: isWide ? 11 : 14,
                     fontWeight: 700, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: 'center',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'background 0.3s',
-                    flexShrink: 0
+                    flexShrink: 0,
                   }}
                 >
                   {key}
@@ -380,4 +467,11 @@ export default function Game() {
       </div>
     </div>
   )
+}
+
+const btnStyle = {
+  width: '100%', padding: '12px',
+  fontSize: 15, fontWeight: 700,
+  color: 'white', border: 'none',
+  borderRadius: 6, cursor: 'pointer',
 }
